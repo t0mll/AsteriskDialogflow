@@ -1,4 +1,5 @@
 using System;
+using System.Net.Http;
 using System.Threading;
 using System.Threading.Tasks;
 using AsterNet.Standard;
@@ -109,10 +110,21 @@ namespace AsteriskDialogflow.AriBridge
         {
             _logger.LogDebug($"Remove channel {e.Channel.Id} from Bridge {_bridge.Id}");
             _actionClient.Bridges.RemoveChannelAsync(_bridge.Id, e.Channel.Id);
-            
-            _logger.LogDebug($"Hangup channel - {e.Channel.Id}");
-            _actionClient.Channels.Hangup(e.Channel.Id, "normal");
-            
+
+            SafeHangup(e.Channel);
+        }
+
+        private void SafeHangup(Channel channel)
+        {
+            try
+            {
+                _logger.LogDebug($"Hangup channel - {channel.Id}");
+                _actionClient.Channels.Hangup(channel.Id, "normal");
+            }
+            catch (HttpRequestException ex)
+            {
+                // We are xpecting a 404 here
+            }
         }
     }
 }
