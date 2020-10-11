@@ -46,8 +46,8 @@ namespace AsteriskDialogflow.AriBridge
         {
             _logger.LogDebug("Connection state is now {0}", _actionClient.Connected);
 
-            if (_actionClient.Connected)
-                _actionClient.Applications.Subscribe(APP_NAME, $"bridge:{_bridge.Id}");
+            //if (_actionClient.Connected)
+                //_actionClient.Applications.Subscribe(APP_NAME, $"bridge:{_bridge.Id}");
         }
 
         private async void c_OnStasisStartEvent(IAriClient sender, StasisStartEvent e)
@@ -58,60 +58,61 @@ namespace AsteriskDialogflow.AriBridge
             _logger.LogDebug($"Add channel {e.Channel.Id} to Bridge {_bridge.Id}");
             await _actionClient.Bridges.AddChannelAsync(_bridge.Id, e.Channel.Id, "member");
 
-            // Create client
-            SessionsClient sessionsClient = SessionsClient.Create();
-            // Initialize streaming call, retrieving the stream object
-            SessionsClient.StreamingDetectIntentStream response = sessionsClient.StreamingDetectIntent();
+            // // Create client
+            // SessionsClient sessionsClient = SessionsClient.Create();
+            // // Initialize streaming call, retrieving the stream object
+            // SessionsClient.StreamingDetectIntentStream response = sessionsClient.StreamingDetectIntent();
 
-            // Sending requests and retrieving responses can be arbitrarily interleaved
-            // Exact sequence will depend on client/server behavior
+            // // Sending requests and retrieving responses can be arbitrarily interleaved
+            // // Exact sequence will depend on client/server behavior
 
-            // Create task to do something with responses from server
-            Task responseHandlerTask = Task.Run(async () =>
-            {
-                // Note that C# 8 code can use await foreach
-                AsyncResponseStream<StreamingDetectIntentResponse> responseStream = response.GetResponseStream();
-                while (await responseStream.MoveNextAsync())
-                {
-                    StreamingDetectIntentResponse responseItem = responseStream.Current;
-                    // Do something with streamed response
-                }
-                // The response stream has completed
-            });
+            // // Create task to do something with responses from server
+            // Task responseHandlerTask = Task.Run(async () =>
+            // {
+            //     // Note that C# 8 code can use await foreach
+            //     AsyncResponseStream<StreamingDetectIntentResponse> responseStream = response.GetResponseStream();
+            //     while (await responseStream.MoveNextAsync())
+            //     {
+            //         StreamingDetectIntentResponse responseItem = responseStream.Current;
+            //         // Do something with streamed response
+            //     }
+            //     // The response stream has completed
+            // });
 
-            // Send requests to the server
-            bool done = false;
-            while (!done)
-            {
-                // Initialize a request
-                StreamingDetectIntentRequest request = new StreamingDetectIntentRequest
-                {
-                    SessionAsSessionName = SessionName.FromProjectSession("coffee-shop-stvq", e.Channel.Id),
-                    QueryParams = new QueryParameters(),
-                    QueryInput = new QueryInput(),
-                    OutputAudioConfig = new OutputAudioConfig(),
-                    InputAudio = ByteString.Empty,
-                    OutputAudioConfigMask = new FieldMask(),
-                };
-                // Stream a request to the server
-                await response.WriteAsync(request);
-                // Set "done" to true when sending requests is complete
-            }
+            // // Send requests to the server
+            // bool done = false;
+            // while (!done)
+            // {
+            //     // Initialize a request
+            //     StreamingDetectIntentRequest request = new StreamingDetectIntentRequest
+            //     {
+            //         SessionAsSessionName = SessionName.FromProjectSession("coffee-shop-stvq", e.Channel.Id),
+            //         QueryParams = new QueryParameters(),
+            //         QueryInput = new QueryInput(),
+            //         OutputAudioConfig = new OutputAudioConfig(),
+            //         InputAudio = ByteString.Empty,
+            //         OutputAudioConfigMask = new FieldMask(),
+            //     };
+            //     // Stream a request to the server
+            //     await response.WriteAsync(request);
+            //     // Set "done" to true when sending requests is complete
+            // }
 
-            // Complete writing requests to the stream
-            await response.WriteCompleteAsync();
-            // Await the response handler
-            // This will complete once all server responses have been processed
-            await responseHandlerTask;
+            // // Complete writing requests to the stream
+            // await response.WriteCompleteAsync();
+            // // Await the response handler
+            // // This will complete once all server responses have been processed
+            // await responseHandlerTask;
         }
 
         private void c_OnStasisEndEvent(IAriClient sender, StasisEndEvent e)
         {
             _logger.LogDebug($"Remove channel {e.Channel.Id} from Bridge {_bridge.Id}");
             _actionClient.Bridges.RemoveChannelAsync(_bridge.Id, e.Channel.Id);
-
+            
             _logger.LogDebug($"Hangup channel - {e.Channel.Id}");
             _actionClient.Channels.Hangup(e.Channel.Id, "normal");
+            
         }
     }
 }
