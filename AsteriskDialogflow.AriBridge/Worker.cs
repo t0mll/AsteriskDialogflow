@@ -1,9 +1,10 @@
 using System;
+using System.IO;
 using System.Net.Http;
 using System.Threading;
 using System.Threading.Tasks;
-using AsterNet.Standard;
-using AsterNet.Standard.Models;
+using AsterNET.ARI;
+using AsterNET.ARI.Models;
 using Google.Api.Gax.Grpc;
 using Google.Cloud.Dialogflow.V2;
 using Google.Protobuf;
@@ -48,7 +49,7 @@ namespace AsteriskDialogflow.AriBridge
             _logger.LogDebug("Connection state is now {0}", _actionClient.Connected);
 
             //if (_actionClient.Connected)
-                //_actionClient.Applications.Subscribe(APP_NAME, $"bridge:{_bridge.Id}");
+            //_actionClient.Applications.Subscribe(APP_NAME, $"bridge:{_bridge.Id}");
         }
 
         private async void c_OnStasisStartEvent(IAriClient sender, StasisStartEvent e)
@@ -59,51 +60,79 @@ namespace AsteriskDialogflow.AriBridge
             _logger.LogDebug($"Add channel {e.Channel.Id} to Bridge {_bridge.Id}");
             await _actionClient.Bridges.AddChannelAsync(_bridge.Id, e.Channel.Id, "member");
 
-            // // Create client
-            // SessionsClient sessionsClient = SessionsClient.Create();
-            // // Initialize streaming call, retrieving the stream object
-            // SessionsClient.StreamingDetectIntentStream response = sessionsClient.StreamingDetectIntent();
+            // Create client
+            SessionsClient sessionsClient = SessionsClient.Create();
+            var sessionName = SessionName.FromProjectSession("coffee-shop-stvq", e.Channel.Id).ToString();
+            // Initialize streaming call, retrieving the stream object
+            SessionsClient.StreamingDetectIntentStream streamingDetectIntent = sessionsClient.StreamingDetectIntent();
+            //_actionClient.Channels.ExternalMedia(APP_NAME, "localhost:7777", "slin16");
+            // Sending requests and retrieving responses can be arbitrarily interleaved
+            // Exact sequence will depend on client/server behavior
 
-            // // Sending requests and retrieving responses can be arbitrarily interleaved
-            // // Exact sequence will depend on client/server behavior
+            // Define a task to process results from the API
+            var responseHandlerTask = Task.Run(async () =>
+            {
+                var responseStream = streamingDetectIntent.GetResponseStream();
+                while (await responseStream.MoveNextAsync())
+                {
+                    var response = responseStream.Current;
+                    var queryResult = response.QueryResult;
 
-            // // Create task to do something with responses from server
-            // Task responseHandlerTask = Task.Run(async () =>
-            // {
-            //     // Note that C# 8 code can use await foreach
-            //     AsyncResponseStream<StreamingDetectIntentResponse> responseStream = response.GetResponseStream();
-            //     while (await responseStream.MoveNextAsync())
-            //     {
-            //         StreamingDetectIntentResponse responseItem = responseStream.Current;
-            //         // Do something with streamed response
-            //     }
-            //     // The response stream has completed
-            // });
+                    if (queryResult != null)
+                    {
+                        _logger.LogDebug($"Query text: {queryResult.QueryText}");
+                        if (queryResult.Intent != null)
+                        {
+                            _logger.LogDebug("Intent detected:");
+                            _logger.LogDebug(queryResult.Intent.DisplayName);
+                        }
+                    }
+                }
+            });
 
-            // // Send requests to the server
-            // bool done = false;
-            // while (!done)
-            // {
-            //     // Initialize a request
-            //     StreamingDetectIntentRequest request = new StreamingDetectIntentRequest
-            //     {
-            //         SessionAsSessionName = SessionName.FromProjectSession("coffee-shop-stvq", e.Channel.Id),
-            //         QueryParams = new QueryParameters(),
-            //         QueryInput = new QueryInput(),
-            //         OutputAudioConfig = new OutputAudioConfig(),
-            //         InputAudio = ByteString.Empty,
-            //         OutputAudioConfigMask = new FieldMask(),
-            //     };
-            //     // Stream a request to the server
-            //     await response.WriteAsync(request);
-            //     // Set "done" to true when sending requests is complete
-            // }
+            // Instructs the speech recognizer how to process the audio content.
+            // Note: hard coding audioEncoding, sampleRateHertz for simplicity.
+            var queryInput = new QueryInput
+            {
+                AudioConfig = new InputAudioConfig
+                {
+                    AudioEncoding = AudioEncoding.Linear16,
+                    LanguageCode = "en-US",
+                    SampleRateHertz = 8000
+                }
+            };
 
-            // // Complete writing requests to the stream
-            // await response.WriteCompleteAsync();
-            // // Await the response handler
-            // // This will complete once all server responses have been processed
-            // await responseHandlerTask;
+            // The first request must **only** contain the audio configuration:
+            await streamingDetectIntent.WriteAsync(new StreamingDetectIntentRequest
+            {
+                QueryInput = queryInput,
+                Session = sessionName
+            });
+
+            using (FileStream fileStream = new FileStream(@"E:\Documents\Projects\AsteriskDialogflow\AsteriskDialogflow.AriBridge\latte.wav", FileMode.Open))
+            {
+                // Subsequent requests must **only** contain the audio data.
+                // Following messages: audio chunks. We just read the file in
+                // fixed-size chunks. In reality you would split the user input
+                // by time.
+                var buffer = new byte[32 * 1024];
+                int bytesRead;
+                while ((bytesRead = await fileStream.ReadAsync(
+                    buffer, 0, buffer.Length)) > 0)
+                {
+                    await streamingDetectIntent.WriteAsync(new StreamingDetectIntentRequest
+                    {
+                        Session = sessionName,
+                        InputAudio = ByteString.CopyFrom(buffer, 0, bytesRead)
+                    });
+                };
+            }
+
+            // Tell the service you are done sending data
+            await streamingDetectIntent.WriteCompleteAsync();
+
+            // This will complete once all server responses have been processed.
+            await responseHandlerTask;
         }
 
         private void c_OnStasisEndEvent(IAriClient sender, StasisEndEvent e)
@@ -111,20 +140,8 @@ namespace AsteriskDialogflow.AriBridge
             _logger.LogDebug($"Remove channel {e.Channel.Id} from Bridge {_bridge.Id}");
             _actionClient.Bridges.RemoveChannelAsync(_bridge.Id, e.Channel.Id);
 
-            SafeHangup(e.Channel);
-        }
-
-        private void SafeHangup(Channel channel)
-        {
-            try
-            {
-                _logger.LogDebug($"Hangup channel - {channel.Id}");
-                _actionClient.Channels.Hangup(channel.Id, "normal");
-            }
-            catch (HttpRequestException ex)
-            {
-                // We are xpecting a 404 here
-            }
+            _logger.LogDebug($"Hangup channel - {e.Channel.Id}");
+            _actionClient.Channels.Hangup(e.Channel.Id, "normal");
         }
     }
 }

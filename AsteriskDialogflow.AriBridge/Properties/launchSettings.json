@@ -3,7 +3,7 @@
     "AsteriskDialogflow.AriBridge": {
       "commandName": "Project",
       "environmentVariables": {
-        "GOOGLE_APPLICATION_CREDENTIALS": "/home/thomas/Documents/AsteriskDialogflow/AsteriskDialogflow.AriBridge/coffee-shop-stvq-f03e75584ab4.json",
+        "GOOGLE_APPLICATION_CREDENTIALS": "E:\\Documents\\Projects\\AsteriskDialogflow\\AsteriskDialogflow.AriBridge\\coffee-shop-stvq-f03e75584ab4.json",
         "DOTNET_ENVIRONMENT": "Development"
       }
     },
